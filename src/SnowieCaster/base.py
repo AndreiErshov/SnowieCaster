@@ -21,20 +21,20 @@ class Subscription:
 		self.updater = updater
 		self._queue = Queue()
 
-	async def __aiter__(self):
-		while isinstance(self._queue, Queue):
-			assert isinstance(self.channel, str), "channel's datatype is str"
-			if self._queue.empty():
-				await self.updater._update_subscriptions(self.channel)
+	async def __aenter__(self):
+		async def iterator_func():
+			nonlocal self
+			while isinstance(self._queue, Queue):
+				assert isinstance(self.channel, str), "channel's datatype is str"
 				if self._queue.empty():
-					yield None
-			else:
-				yield await self._queue.get()
+					await self.updater._update_subscriptions(self.channel)
+					if self._queue.empty():
+						yield None
+				else:
+					yield await self._queue.get()
+		return iterator_func()
 
-	def __enter__(self):
-		return self
-
-	def __exit__(self, *args, **kwargs):
+	async def __aexit__(self, *args, **kwargs):
 		self._queue = None
 
 	def __del__(self):
