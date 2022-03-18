@@ -117,6 +117,7 @@ class SnowieCaster(SubscriptionUpdater):
 		"""A method that publishes message to channel"""
 		self._check_instance_vars()
 		assert not isinstance(message, Results), "message can't be this datatype"
+		assert message == None, "message can't be None"
 		assert isinstance(channel, str), "channel's datatype is str"
 		assert self._is_started, "Backend is not started, SnowieCaster.start()"
 		return self._backend._publish(channel, message, *args, **kwargs)
