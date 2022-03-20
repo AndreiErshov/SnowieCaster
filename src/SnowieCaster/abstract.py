@@ -30,9 +30,6 @@ class AbstractBackend(ABC):
 	def _stop(self) -> None:
 		raise NotImplementedError()
 
-	def _publish(self, channel: str, message: Any, *args, **kwargs) -> None:
-		raise NotImplementedError()
-
 	@abstractmethod
 	async def _astart(self, *args, **kwargs) -> None:
 		pass
@@ -58,7 +55,3 @@ class ISyncBackend(AbstractBackend):
 
 	async def _astop(self) -> None:
 		return self._stop()
-
-	async def _apublish(self, channel: str, message: Any, *args, **kwargs) -> None:
-		return self._publish(channel, message, *args, **kwargs)
-

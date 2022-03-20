@@ -28,12 +28,7 @@ class Subscription:
 			assert isinstance(self.channel, str), "channel's datatype is str"
 			if self._queue.empty():
 				await self.updater._update_subscriptions(self.channel)
-				if self._queue.empty():
-					yield None
-				else:
-					yield await self._queue.get()
-			else:
-				yield await self._queue.get()
+			yield await self._queue.get()
 
 	async def __aenter__(self):
 		return self
@@ -53,7 +48,8 @@ class SnowieCaster(SubscriptionUpdater):
 		"""This method inherits from SubscriptionUpdater and updates Subscription's class Queries"""
 		self._check_instance_vars()
 		assert isinstance(channel, str), "channel's datatype is str"
-		assert channel in self._channel_subs, "can't find channel"
+		if channel not in self._channel_subs:
+			return False
 		subs: List[Subscription] = self._channel_subs[channel]
 		assert isinstance(subs, list)
 
@@ -113,15 +109,6 @@ class SnowieCaster(SubscriptionUpdater):
 		self._is_started = False
 		return result
 
-	def publish(self, channel: str, message: Any, *args, **kwargs) -> None:
-		"""A method that publishes message to channel"""
-		self._check_instance_vars()
-		assert not isinstance(message, Results), "message can't be this datatype"
-		assert message == None, "message can't be None"
-		assert isinstance(channel, str), "channel's datatype is str"
-		assert self._is_started, "Backend is not started, SnowieCaster.start()"
-		return self._backend._publish(channel, message, *args, **kwargs)
-
 	async def asubscribe(self, channel: str) -> None:
 		"""Subscribe to channel updates asynchronously"""
 		self._check_instance_vars()
@@ -152,4 +139,6 @@ class SnowieCaster(SubscriptionUpdater):
 		datatype (don't try import it)"
 		assert isinstance(channel, str), "channel's datatype is str"
 		assert self._is_started, "Backend is not started, SnowieCaster.start()"
-		return await self._backend._apublish(channel, message, *args, **kwargs)
+		result = await self._backend._apublish(channel, message, *args, **kwargs)
+		await self._update_subscriptions(channel)
+		return result
