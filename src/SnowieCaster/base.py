@@ -6,9 +6,8 @@
 A general script for contacting with this library
 """
 
-import gc
 from asyncio import Queue
-from typing import Any, Dict, Optional, List, AsyncIterator
+from typing import Any, Dict, Optional, List, AsyncGenerator
 from .abstract import AbstractBackend, Results, SubscriptionUpdater
 
 
@@ -22,18 +21,22 @@ class Subscription:
 		self.updater = updater
 		self._queue = Queue()
 
-	async def __aenter__(self):
-		async def iterator_func():
-			nonlocal self
-			while isinstance(self._queue, Queue):
-				assert isinstance(self.channel, str), "channel's datatype is str"
+	async def __aiter__(self) -> Optional[AsyncGenerator]:
+		while True:
+			if not isinstance(self._queue, Queue):
+				break
+			assert isinstance(self.channel, str), "channel's datatype is str"
+			if self._queue.empty():
+				await self.updater._update_subscriptions(self.channel)
 				if self._queue.empty():
-					await self.updater._update_subscriptions(self.channel)
-					if self._queue.empty():
-						yield None
+					yield None
 				else:
 					yield await self._queue.get()
-		return iterator_func()
+			else:
+				yield await self._queue.get()
+
+	async def __aenter__(self):
+		return self
 
 	async def __aexit__(self, *args, **kwargs):
 		self._queue = None
