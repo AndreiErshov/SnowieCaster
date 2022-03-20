@@ -67,9 +67,10 @@ class SnowieCaster(SubscriptionUpdater):
 
 		for i in range(subs_length):
 			sub = subs[i]
+			assert isinstance(sub, Subscription), "sub's datatype isn't Subscription"
 			if not isinstance(sub._queue, Queue):
 				# here is mb bug
-				subs._queue = None
+				sub._queue = None
 				del subs[i]
 				continue
 			data = await get_result()
