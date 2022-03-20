@@ -46,7 +46,7 @@ class AbstractBackend(ABC):
 		pass
 
 	@abstractmethod
-	async def _asubscribe(self, channel: str) -> AsyncIterator[Any]:
+	async def aget_next(self, channel: str) -> AsyncIterator[Any]:
 		pass
 
 

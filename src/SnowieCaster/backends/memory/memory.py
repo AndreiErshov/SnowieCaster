@@ -33,15 +33,14 @@ class MemoryBackend(ISyncBackend):
 		"store's datatype is not Dict[str, Queue]"
 		await sub.put(message)
 
-
-	async def _asubscribe(self, channel: str) -> AsyncIterator[Any]:
+	async def aget_next(self, channel: str) -> Any:
 		self._check_instance_vars()
 		assert isinstance(channel, str), "channel's datatype is not str"
 		if channel not in self.store:
 			self.store[channel] = Queue()
-		while isinstance(self.store[channel], Queue):
-			channel_queue = self.store[channel]
-			if channel_queue.empty():
-				yield Results.NO_DATA
-			else:
-				yield await channel_queue.get()
+		channel_queue = self.store[channel]
+		if not isinstance(channel_queue, Queue) or channel_queue.empty():
+			return Results.NO_DATA
+		else:
+			return await channel_queue.get()
+		

@@ -6,6 +6,7 @@
 A general script for contacting with this library
 """
 
+import gc
 from asyncio import Queue
 from typing import Any, Dict, Optional, List, AsyncIterator
 from .abstract import AbstractBackend, Results, SubscriptionUpdater
@@ -37,9 +38,6 @@ class Subscription:
 	async def __aexit__(self, *args, **kwargs):
 		self._queue = None
 
-	def __del__(self):
-		self._queue = None
-
 
 class SnowieCaster(SubscriptionUpdater):
 	"""A general class for contacting with this library"""
@@ -53,7 +51,6 @@ class SnowieCaster(SubscriptionUpdater):
 		self._check_instance_vars()
 		assert isinstance(channel, str), "channel's datatype is str"
 		assert channel in self._channel_subs, "can't find channel"
-		backend_iterator: AsyncIterator[Any] = self._backend._asubscribe(channel)
 		subs: List[Subscription] = self._channel_subs[channel]
 		assert isinstance(subs, list)
 
@@ -65,7 +62,7 @@ class SnowieCaster(SubscriptionUpdater):
 		async def get_result():
 			nonlocal result
 			if result is Results.NONE_DATA:
-				result = await backend_iterator.__anext__()
+				result = await self._backend.aget_next(channel)
 			return result
 
 
@@ -79,7 +76,7 @@ class SnowieCaster(SubscriptionUpdater):
 			data = await get_result()
 			if data is Results.NO_DATA:
 				return False
-			await sub._queue.put(result)
+			await sub._queue.put(data)
 		return True
 
 	# what a stupid warning in pylint
