@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="snowiecaster",
-    version="0.0.4",
+    version="0.0.5",
     author="Andrei Ershov",
     author_email="author@example.com",
     description="An easy pub/sub python library",
