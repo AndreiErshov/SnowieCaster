@@ -100,12 +100,16 @@ class SnowieCaster(SubscriptionUpdater):
 
 	def start(self, *args, **kwargs) -> None:
 		"""try to start backend synchronously"""
+		if self._is_started:
+			return False
 		result = self._backend._start(*args, **kwargs)
 		self._is_started = True
 		return result
 
 	def stop(self) -> None:
 		"""try to stop backend synchronously"""
+		if not self._is_started:
+			return False
 		result = self._backend._stop()
 		self._is_started = False
 		return result
