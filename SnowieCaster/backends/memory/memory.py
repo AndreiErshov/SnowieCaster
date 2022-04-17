@@ -4,8 +4,8 @@ Memory backend class
 #pylint: disable=W0311, R0903, W0221, W0201
 
 from asyncio import Queue
-from typing import Any, Dict, AsyncIterator
-from ...abstract import ISyncBackend, Results
+from typing import List, Any, Dict
+from ...abstract import ISyncBackend
 
 
 class MemoryBackend(ISyncBackend):
@@ -33,14 +33,14 @@ class MemoryBackend(ISyncBackend):
 		"store's datatype is not Dict[str, Queue]"
 		await sub.put(message)
 
-	async def aget_next(self, channel: str) -> Any:
+	async def _aget_all(self, channel: str) -> List[Any]:
 		self._check_instance_vars()
 		assert isinstance(channel, str), "channel's datatype is not str"
 		if channel not in self.store:
 			self.store[channel] = Queue()
 		channel_queue = self.store[channel]
-		if not isinstance(channel_queue, Queue) or channel_queue.empty():
-			return Results.NO_DATA
-		else:
-			return await channel_queue.get()
-		
+		assert isinstance(channel_queue, Queue)
+		result = []
+		while isinstance(channel_queue, Queue) and not channel_queue.empty():
+			result.append(await channel_queue.get())
+		return result

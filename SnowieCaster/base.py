@@ -47,36 +47,33 @@ class SnowieCaster(SubscriptionUpdater):
 	async def _update_subscriptions(self, channel: str):
 		"""This method inherits from SubscriptionUpdater and updates Subscription's class Queries"""
 		self._check_instance_vars()
+		if not self._is_started:
+			return False
 		assert isinstance(channel, str), "channel's datatype is str"
 		if channel not in self._channel_subs:
 			return False
 		subs: List[Subscription] = self._channel_subs[channel]
 		assert isinstance(subs, list)
 
-		subs_length = len(subs)
-		if subs_length < 1:
-			return False
-
 		result = Results.NONE_DATA
 		async def get_result():
 			nonlocal result
 			if result is Results.NONE_DATA:
-				result = await self._backend.aget_next(channel)
+				result = await self._backend._aget_all(channel)
 			return result
 
-
-		for i in range(subs_length):
-			sub = subs[i]
+		for sub in subs:
 			assert isinstance(sub, Subscription), "sub's datatype isn't Subscription"
 			if not isinstance(sub._queue, Queue):
 				# here is mb bug
 				sub._queue = None
-				del subs[i]
+				subs.remove(sub)
 				continue
 			data = await get_result()
-			if data is Results.NO_DATA:
+			if len(data) == 0:
 				return False
-			await sub._queue.put(data)
+			for data_result in data:
+				await sub._queue.put(data_result)
 		return True
 
 	# what a stupid warning in pylint
@@ -127,13 +124,17 @@ class SnowieCaster(SubscriptionUpdater):
 
 	async def astart(self, *args, **kwargs) -> None:
 		"""Start backend asynchronously"""
+		if self._is_started:
+			return False
 		result = await self._backend._astart(*args, **kwargs)
 		self._is_started = True
 		return result
 
 	async def astop(self, *args, **kwargs) -> None:
 		"""Stop backend asynchronously"""
-		result = await self._backend._start(*args, **kwargs)
+		if not self._is_started:
+			return False
+		result = await self._backend._astart(*args, **kwargs)
 		self._is_started = False
 		return result
 

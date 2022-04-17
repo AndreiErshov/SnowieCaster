@@ -53,6 +53,9 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
+# Pytest
+.pytest_cache/
+
 html/
 
 # PyBuilder

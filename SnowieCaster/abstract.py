@@ -4,14 +4,13 @@ This script is used to access an abstract class for other backends
 
 # pylint: disable=W0311, W0107, R0903
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, Any
+from typing import List, Any
 from enum import Enum
 
 
 class Results(Enum):
 	"""This class is using in SnowieCaster code for update_subscriptions method"""
-	NO_DATA = 1
-	NONE_DATA = 2
+	NONE_DATA = 1
 
 
 class SubscriptionUpdater(ABC):
@@ -43,7 +42,7 @@ class AbstractBackend(ABC):
 		pass
 
 	@abstractmethod
-	async def aget_next(self, channel: str) -> AsyncIterator[Any]:
+	async def _aget_all(self, channel: str) -> List[Any]:
 		pass
 
 

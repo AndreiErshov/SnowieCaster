@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="snowiecaster",
-    version="0.0.9",
+    version="0.1.0",
     author="Andrei Ershov",
     author_email="author@example.com",
     description="An easy pub/sub python library",
@@ -21,7 +21,7 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    package_dir={"": "src"},
-    packages=setuptools.find_packages(where="src"),
+    package_dir={"": "SnowieCaster"},
+    packages=setuptools.find_packages(where="SnowieCaster"),
     python_requires=">=3.6",
 )
