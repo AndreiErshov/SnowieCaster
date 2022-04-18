@@ -11,8 +11,9 @@ def create_memory_backend():
 
 @pytest.fixture
 def create_caster(create_memory_backend):
-	def caster_creator():
+	def caster_creator(requests_delay=None, requests_delay_limit=None):
 		memory_backend = create_memory_backend()
-		caster = SnowieCaster(memory_backend, auto_start=True)
+		memory_backend._request_delay_limit = requests_delay_limit
+		caster = SnowieCaster(memory_backend, requests_delay=requests_delay, auto_start=True)
 		return (caster, memory_backend)
 	return caster_creator

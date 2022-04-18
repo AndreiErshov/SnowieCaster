@@ -56,6 +56,9 @@ docs/_build/
 # Pytest
 .pytest_cache/
 
+# Pipenv lock
+Pipfile.lock
+
 html/
 
 # PyBuilder

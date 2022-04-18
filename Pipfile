@@ -4,13 +4,14 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pytest-order = "*"
 
 [dev-packages]
 build = "*"
-pytest-cov = "*"
+pdoc3 = "*"
 pytest = "*"
 pytest-asyncio = "*"
+pytest-order = "*"
+pytest-cov = "*"
 pylint = "*"
 
 [requires]

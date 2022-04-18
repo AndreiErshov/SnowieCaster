@@ -1,5 +1,5 @@
 #pylint: disable=C0114, C0116, W0311, W0212
-from asyncio import Queue
+from asyncio import Queue, sleep, gather
 import string
 import random
 import pytest
@@ -34,13 +34,26 @@ async def test_get_all(create_caster):
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("create_caster")
 async def test_subscription_iteration(create_caster):
-	caster, _ = create_caster()
+	caster, _ = create_caster(requests_delay=5, requests_delay_limit=5)
 	subscription = await caster.asubscribe("channel")
 	subscription._queue = None
 	async for _ in subscription:
 		assert False, "No data in subscription, but it's called"
 	await caster._update_subscriptions("channel")
 	assert len(caster._channel_subs["channel"]) == 0, "Bad length of channel subs list"
+
+	async def test_subscription_iteration_waiter():
+		subscription = await caster.asubscribe("channel2")
+		async with subscription as data:
+			async for data_value in data:
+				assert data_value == "test_message"
+				break
+
+	async def test_subscription_iteration_publisher():
+		await sleep(9)
+		await caster.apublish("channel2", "test_message", testing=True)
+
+	await gather(test_subscription_iteration_publisher(), test_subscription_iteration_waiter())
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("create_caster")

@@ -6,7 +6,7 @@
 A general script for contacting with this library
 """
 
-from asyncio import Queue
+from asyncio import Queue, sleep
 from typing import Any, Dict, Optional, List, AsyncGenerator
 from .abstract import AbstractBackend, Results, SubscriptionUpdater
 
@@ -23,11 +23,15 @@ class Subscription:
 
 	async def __aiter__(self) -> Optional[AsyncGenerator]:
 		while True:
+			assert isinstance(self.channel, str), "channel's datatype is str"
+			while isinstance(self._queue, Queue) and self._queue.empty():
+				await self.updater._update_subscriptions(self.channel)
+				request_delay = self.updater.get_request_delay()
+				if request_delay is None:
+					break
+				await sleep(request_delay)
 			if not isinstance(self._queue, Queue):
 				break
-			assert isinstance(self.channel, str), "channel's datatype is str"
-			if self._queue.empty():
-				await self.updater._update_subscriptions(self.channel)
 			yield await self._queue.get()
 
 	async def __aenter__(self):
@@ -43,6 +47,14 @@ class SnowieCaster(SubscriptionUpdater):
 		"""This method checks is class vars are valid"""
 		assert isinstance(self._channel_subs, dict)
 		assert isinstance(self._backend, AbstractBackend)
+		assert hasattr(self._backend, "_request_delay_limit"), \
+		"Haven't _request_delay_limit attribute in backend class"
+		assert self._backend._request_delay_limit is None or \
+		isinstance(self._backend._request_delay_limit, int), \
+		"Bad _request_delay_limit attribute datatype in backend class"
+
+	def get_request_delay(self):
+		return self._request_delay
 
 	async def _update_subscriptions(self, channel: str):
 		"""This method inherits from SubscriptionUpdater and updates Subscription's class Queries"""
@@ -77,14 +89,18 @@ class SnowieCaster(SubscriptionUpdater):
 		return True
 
 	# what a stupid warning in pylint
-	def __init__(self, backend: AbstractBackend, auto_start: Optional[bool] = False, *args, **kwargs): #pylint: disable=W1113
+	def __init__(self, backend: AbstractBackend, *args, requests_delay = None,
+				 auto_start: Optional[bool] = False, **kwargs):
 		"""Class init method"""
-		assert isinstance(backend, AbstractBackend), "This is not a backend class instance"
 		assert isinstance(auto_start, bool), "auto_start's datatype is Optional[bool]"
 		self._backend = backend
+		self._request_delay = requests_delay
 		self._channel_subs: Dict[str, List[Subscription]] = {}
 		self._is_started = False
 
+		self._check_instance_vars()
+		if backend._request_delay_limit is None:
+			self._request_delay = None
 		if auto_start:
 			self.start(*args, **kwargs)
 
@@ -138,7 +154,7 @@ class SnowieCaster(SubscriptionUpdater):
 		self._is_started = False
 		return result
 
-	async def apublish(self, channel: str, message: Any, *args, **kwargs) -> None:
+	async def apublish(self, channel: str, message: Any, *args, testing=False, **kwargs) -> None:
 		"""Publish message to channel asynchronously"""
 		self._check_instance_vars()
 		assert not isinstance(message, Results), "message can't be SnowieCaster.abstract.Results \
@@ -146,5 +162,6 @@ class SnowieCaster(SubscriptionUpdater):
 		assert isinstance(channel, str), "channel's datatype is str"
 		assert self._is_started, "Backend is not started, SnowieCaster.start()"
 		result = await self._backend._apublish(channel, message, *args, **kwargs)
-		await self._update_subscriptions(channel)
+		if not testing:
+			await self._update_subscriptions(channel)
 		return result

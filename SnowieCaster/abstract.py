@@ -4,8 +4,10 @@ This script is used to access an abstract class for other backends
 
 # pylint: disable=W0311, W0107, R0903
 from abc import ABC, abstractmethod
-from typing import List, Any
+from typing import List, Any, TypeVar
 from enum import Enum
+
+A = TypeVar('A', int, None)
 
 
 class Results(Enum):
@@ -15,6 +17,12 @@ class Results(Enum):
 
 class SubscriptionUpdater(ABC):
 	"""Abstract wrapper around SnowieCaster class for typization"""
+
+	@abstractmethod
+	def get_request_delay(self) -> A:
+		"""Abstract method to get request delay from backend"""
+		pass
+
 	@abstractmethod
 	async def _update_subscriptions(self, channel: str):
 		"""Abstract method for typization"""
@@ -23,6 +31,9 @@ class SubscriptionUpdater(ABC):
 
 class AbstractBackend(ABC):
 	"""Abstract class that created for multibackend support"""
+
+	_request_delay_limit: A = None
+
 	def _start(self, *args, **kwargs) -> None:
 		raise NotImplementedError()
 

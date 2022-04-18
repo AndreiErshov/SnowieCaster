@@ -33,18 +33,25 @@ This script is used to access an abstract class for other backends
 
 # pylint: disable=W0311, W0107, R0903
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, Any
+from typing import List, Any, TypeVar
 from enum import Enum
+
+A = TypeVar(&#39;A&#39;, int, None)
 
 
 class Results(Enum):
         &#34;&#34;&#34;This class is using in SnowieCaster code for update_subscriptions method&#34;&#34;&#34;
-        NO_DATA = 1
-        NONE_DATA = 2
+        NONE_DATA = 1
 
 
 class SubscriptionUpdater(ABC):
         &#34;&#34;&#34;Abstract wrapper around SnowieCaster class for typization&#34;&#34;&#34;
+
+        @abstractmethod
+        def get_request_delay(self) -&gt; A:
+                &#34;&#34;&#34;Abstract method to get request delay from backend&#34;&#34;&#34;
+                pass
+
         @abstractmethod
         async def _update_subscriptions(self, channel: str):
                 &#34;&#34;&#34;Abstract method for typization&#34;&#34;&#34;
@@ -53,13 +60,13 @@ class SubscriptionUpdater(ABC):
 
 class AbstractBackend(ABC):
         &#34;&#34;&#34;Abstract class that created for multibackend support&#34;&#34;&#34;
+
+        _request_delay_limit: A = None
+
         def _start(self, *args, **kwargs) -&gt; None:
                 raise NotImplementedError()
 
         def _stop(self) -&gt; None:
-                raise NotImplementedError()
-
-        def _publish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
                 raise NotImplementedError()
 
         @abstractmethod
@@ -75,7 +82,7 @@ class AbstractBackend(ABC):
                 pass
 
         @abstractmethod
-        async def _asubscribe(self, channel: str) -&gt; AsyncIterator[Any]:
+        async def _aget_all(self, channel: str) -&gt; List[Any]:
                 pass
 
 
@@ -86,10 +93,7 @@ class ISyncBackend(AbstractBackend):
                 return self._start(*args, **kwargs)
 
         async def _astop(self) -&gt; None:
-                return self._stop()
-
-        async def _apublish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
-                return self._publish(channel, message, *args, **kwargs)</code></pre>
+                return self._stop()</code></pre>
 </details>
 </section>
 <section>
@@ -112,13 +116,13 @@ class ISyncBackend(AbstractBackend):
 </summary>
 <pre><code class="python">class AbstractBackend(ABC):
         &#34;&#34;&#34;Abstract class that created for multibackend support&#34;&#34;&#34;
+
+        _request_delay_limit: A = None
+
         def _start(self, *args, **kwargs) -&gt; None:
                 raise NotImplementedError()
 
         def _stop(self) -&gt; None:
-                raise NotImplementedError()
-
-        def _publish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
                 raise NotImplementedError()
 
         @abstractmethod
@@ -134,7 +138,7 @@ class ISyncBackend(AbstractBackend):
                 pass
 
         @abstractmethod
-        async def _asubscribe(self, channel: str) -&gt; AsyncIterator[Any]:
+        async def _aget_all(self, channel: str) -&gt; List[Any]:
                 pass</code></pre>
 </details>
 <h3>Ancestors</h3>
@@ -162,10 +166,7 @@ class ISyncBackend(AbstractBackend):
                 return self._start(*args, **kwargs)
 
         async def _astop(self) -&gt; None:
-                return self._stop()
-
-        async def _apublish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
-                return self._publish(channel, message, *args, **kwargs)</code></pre>
+                return self._stop()</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -189,8 +190,7 @@ class ISyncBackend(AbstractBackend):
 </summary>
 <pre><code class="python">class Results(Enum):
         &#34;&#34;&#34;This class is using in SnowieCaster code for update_subscriptions method&#34;&#34;&#34;
-        NO_DATA = 1
-        NONE_DATA = 2</code></pre>
+        NONE_DATA = 1</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -199,10 +199,6 @@ class ISyncBackend(AbstractBackend):
 <h3>Class variables</h3>
 <dl>
 <dt id="SnowieCaster.abstract.Results.NONE_DATA"><code class="name">var <span class="ident">NONE_DATA</span></code></dt>
-<dd>
-<div class="desc"></div>
-</dd>
-<dt id="SnowieCaster.abstract.Results.NO_DATA"><code class="name">var <span class="ident">NO_DATA</span></code></dt>
 <dd>
 <div class="desc"></div>
 </dd>
@@ -219,6 +215,12 @@ class ISyncBackend(AbstractBackend):
 </summary>
 <pre><code class="python">class SubscriptionUpdater(ABC):
         &#34;&#34;&#34;Abstract wrapper around SnowieCaster class for typization&#34;&#34;&#34;
+
+        @abstractmethod
+        def get_request_delay(self) -&gt; A:
+                &#34;&#34;&#34;Abstract method to get request delay from backend&#34;&#34;&#34;
+                pass
+
         @abstractmethod
         async def _update_subscriptions(self, channel: str):
                 &#34;&#34;&#34;Abstract method for typization&#34;&#34;&#34;
@@ -232,6 +234,24 @@ class ISyncBackend(AbstractBackend):
 <ul class="hlist">
 <li><a title="SnowieCaster.base.SnowieCaster" href="base.html#SnowieCaster.base.SnowieCaster">SnowieCaster</a></li>
 </ul>
+<h3>Methods</h3>
+<dl>
+<dt id="SnowieCaster.abstract.SubscriptionUpdater.get_request_delay"><code class="name flex">
+<span>def <span class="ident">get_request_delay</span></span>(<span>self) ‑> ~A</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Abstract method to get request delay from backend</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">@abstractmethod
+def get_request_delay(self) -&gt; A:
+        &#34;&#34;&#34;Abstract method to get request delay from backend&#34;&#34;&#34;
+        pass</code></pre>
+</details>
+</dd>
+</dl>
 </dd>
 </dl>
 </section>
@@ -259,11 +279,13 @@ class ISyncBackend(AbstractBackend):
 <h4><code><a title="SnowieCaster.abstract.Results" href="#SnowieCaster.abstract.Results">Results</a></code></h4>
 <ul class="">
 <li><code><a title="SnowieCaster.abstract.Results.NONE_DATA" href="#SnowieCaster.abstract.Results.NONE_DATA">NONE_DATA</a></code></li>
-<li><code><a title="SnowieCaster.abstract.Results.NO_DATA" href="#SnowieCaster.abstract.Results.NO_DATA">NO_DATA</a></code></li>
 </ul>
 </li>
 <li>
 <h4><code><a title="SnowieCaster.abstract.SubscriptionUpdater" href="#SnowieCaster.abstract.SubscriptionUpdater">SubscriptionUpdater</a></code></h4>
+<ul class="">
+<li><code><a title="SnowieCaster.abstract.SubscriptionUpdater.get_request_delay" href="#SnowieCaster.abstract.SubscriptionUpdater.get_request_delay">get_request_delay</a></code></li>
+</ul>
 </li>
 </ul>
 </li>

@@ -5,6 +5,8 @@ from SnowieCaster import SnowieCaster, abstract
 
 
 class TestBackend(abstract.AbstractBackend):
+	_request_delay_limit = None
+
 	async def _astart(self, *args, **kwargs) -> None:
 		pass
 

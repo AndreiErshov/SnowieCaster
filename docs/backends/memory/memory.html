@@ -33,12 +33,15 @@ Memory backend class
 #pylint: disable=W0311, R0903, W0221, W0201
 
 from asyncio import Queue
-from typing import Any, Dict, AsyncIterator
-from SnowieCaster.abstract import ISyncBackend, Results
+from typing import List, Any, Dict
+from ...abstract import ISyncBackend
 
 
 class MemoryBackend(ISyncBackend):
         &#34;&#34;&#34;This class allows you to use pub/sub in-memory&#34;&#34;&#34;
+
+        _request_delay_limit = None
+
         def _check_instance_vars(self):
                 &#34;&#34;&#34;This method checks is class vars are valid&#34;&#34;&#34;
                 assert hasattr(self, &#39;store&#39;), &#39;store is not defined, mb u call start?&#39;
@@ -62,18 +65,17 @@ class MemoryBackend(ISyncBackend):
                 &#34;store&#39;s datatype is not Dict[str, Queue]&#34;
                 await sub.put(message)
 
-
-        async def _asubscribe(self, channel: str) -&gt; AsyncIterator[Any]:
+        async def _aget_all(self, channel: str) -&gt; List[Any]:
                 self._check_instance_vars()
                 assert isinstance(channel, str), &#34;channel&#39;s datatype is not str&#34;
                 if channel not in self.store:
                         self.store[channel] = Queue()
-                while isinstance(self.store[channel], Queue):
-                        channel_queue = self.store[channel]
-                        if channel_queue.empty():
-                                yield Results.NO_DATA
-                        else:
-                                yield await channel_queue.get()</code></pre>
+                channel_queue = self.store[channel]
+                assert isinstance(channel_queue, Queue)
+                result = []
+                while isinstance(channel_queue, Queue) and not channel_queue.empty():
+                        result.append(await channel_queue.get())
+                return result</code></pre>
 </details>
 </section>
 <section>
@@ -96,6 +98,9 @@ class MemoryBackend(ISyncBackend):
 </summary>
 <pre><code class="python">class MemoryBackend(ISyncBackend):
         &#34;&#34;&#34;This class allows you to use pub/sub in-memory&#34;&#34;&#34;
+
+        _request_delay_limit = None
+
         def _check_instance_vars(self):
                 &#34;&#34;&#34;This method checks is class vars are valid&#34;&#34;&#34;
                 assert hasattr(self, &#39;store&#39;), &#39;store is not defined, mb u call start?&#39;
@@ -119,18 +124,17 @@ class MemoryBackend(ISyncBackend):
                 &#34;store&#39;s datatype is not Dict[str, Queue]&#34;
                 await sub.put(message)
 
-
-        async def _asubscribe(self, channel: str) -&gt; AsyncIterator[Any]:
+        async def _aget_all(self, channel: str) -&gt; List[Any]:
                 self._check_instance_vars()
                 assert isinstance(channel, str), &#34;channel&#39;s datatype is not str&#34;
                 if channel not in self.store:
                         self.store[channel] = Queue()
-                while isinstance(self.store[channel], Queue):
-                        channel_queue = self.store[channel]
-                        if channel_queue.empty():
-                                yield Results.NO_DATA
-                        else:
-                                yield await channel_queue.get()</code></pre>
+                channel_queue = self.store[channel]
+                assert isinstance(channel_queue, Queue)
+                result = []
+                while isinstance(channel_queue, Queue) and not channel_queue.empty():
+                        result.append(await channel_queue.get())
+                return result</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">

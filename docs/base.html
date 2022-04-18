@@ -35,8 +35,8 @@
 A general script for contacting with this library
 &#34;&#34;&#34;
 
-from asyncio import Queue
-from typing import Any, Dict, Optional, List, AsyncIterator
+from asyncio import Queue, sleep
+from typing import Any, Dict, Optional, List, AsyncGenerator
 from .abstract import AbstractBackend, Results, SubscriptionUpdater
 
 
@@ -50,23 +50,23 @@ class Subscription:
                 self.updater = updater
                 self._queue = Queue()
 
-        async def __aiter__(self):
-                while isinstance(self._queue, Queue):
+        async def __aiter__(self) -&gt; Optional[AsyncGenerator]:
+                while True:
                         assert isinstance(self.channel, str), &#34;channel&#39;s datatype is str&#34;
-                        if self._queue.empty():
+                        while isinstance(self._queue, Queue) and self._queue.empty():
                                 await self.updater._update_subscriptions(self.channel)
-                                if self._queue.empty():
-                                        yield None
-                        else:
-                                yield await self._queue.get()
+                                request_delay = self.updater.get_request_delay()
+                                if request_delay is None:
+                                        break
+                                await sleep(request_delay)
+                        if not isinstance(self._queue, Queue):
+                                break
+                        yield await self._queue.get()
 
-        def __enter__(self):
+        async def __aenter__(self):
                 return self
 
-        def __exit__(self, *args, **kwargs):
-                self._queue = None
-
-        def __del__(self):
+        async def __aexit__(self, *args, **kwargs):
                 self._queue = None
 
 
@@ -76,50 +76,60 @@ class SnowieCaster(SubscriptionUpdater):
                 &#34;&#34;&#34;This method checks is class vars are valid&#34;&#34;&#34;
                 assert isinstance(self._channel_subs, dict)
                 assert isinstance(self._backend, AbstractBackend)
+                assert hasattr(self._backend, &#34;_request_delay_limit&#34;), \
+                &#34;Haven&#39;t _request_delay_limit attribute in backend class&#34;
+                assert self._backend._request_delay_limit is None or \
+                isinstance(self._backend._request_delay_limit, int), \
+                &#34;Bad _request_delay_limit attribute datatype in backend class&#34;
+
+        def get_request_delay(self):
+                return self._request_delay
 
         async def _update_subscriptions(self, channel: str):
                 &#34;&#34;&#34;This method inherits from SubscriptionUpdater and updates Subscription&#39;s class Queries&#34;&#34;&#34;
                 self._check_instance_vars()
+                if not self._is_started:
+                        return False
                 assert isinstance(channel, str), &#34;channel&#39;s datatype is str&#34;
-                assert channel in self._channel_subs, &#34;can&#39;t find channel&#34;
-                backend_iterator: AsyncIterator[Any] = self._backend._asubscribe(channel)
+                if channel not in self._channel_subs:
+                        return False
                 subs: List[Subscription] = self._channel_subs[channel]
                 assert isinstance(subs, list)
-
-                subs_length = len(subs)
-                if subs_length &lt; 1:
-                        return False
 
                 result = Results.NONE_DATA
                 async def get_result():
                         nonlocal result
                         if result is Results.NONE_DATA:
-                                result = await backend_iterator.__anext__()
+                                result = await self._backend._aget_all(channel)
                         return result
 
-
-                for i in range(subs_length):
-                        sub = subs[i]
+                for sub in subs:
+                        assert isinstance(sub, Subscription), &#34;sub&#39;s datatype isn&#39;t Subscription&#34;
                         if not isinstance(sub._queue, Queue):
                                 # here is mb bug
-                                subs._queue = None
-                                del subs[i]
+                                sub._queue = None
+                                subs.remove(sub)
                                 continue
                         data = await get_result()
-                        if data is Results.NO_DATA:
+                        if len(data) == 0:
                                 return False
-                        await sub._queue.put(result)
+                        for data_result in data:
+                                await sub._queue.put(data_result)
                 return True
 
         # what a stupid warning in pylint
-        def __init__(self, backend: AbstractBackend, auto_start: Optional[bool] = False, *args, **kwargs): #pylint: disable=W1113
+        def __init__(self, backend: AbstractBackend, *args, requests_delay = None,
+                                 auto_start: Optional[bool] = False, **kwargs):
                 &#34;&#34;&#34;Class init method&#34;&#34;&#34;
-                assert isinstance(backend, AbstractBackend), &#34;This is not a backend class instance&#34;
                 assert isinstance(auto_start, bool), &#34;auto_start&#39;s datatype is Optional[bool]&#34;
                 self._backend = backend
+                self._request_delay = requests_delay
                 self._channel_subs: Dict[str, List[Subscription]] = {}
                 self._is_started = False
 
+                self._check_instance_vars()
+                if backend._request_delay_limit is None:
+                        self._request_delay = None
                 if auto_start:
                         self.start(*args, **kwargs)
 
@@ -132,23 +142,19 @@ class SnowieCaster(SubscriptionUpdater):
 
         def start(self, *args, **kwargs) -&gt; None:
                 &#34;&#34;&#34;try to start backend synchronously&#34;&#34;&#34;
+                if self._is_started:
+                        return False
                 result = self._backend._start(*args, **kwargs)
                 self._is_started = True
                 return result
 
         def stop(self) -&gt; None:
                 &#34;&#34;&#34;try to stop backend synchronously&#34;&#34;&#34;
+                if not self._is_started:
+                        return False
                 result = self._backend._stop()
                 self._is_started = False
                 return result
-
-        def publish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
-                &#34;&#34;&#34;A method that publishes message to channel&#34;&#34;&#34;
-                self._check_instance_vars()
-                assert not isinstance(message, Results), &#34;message can&#39;t be this datatype&#34;
-                assert isinstance(channel, str), &#34;channel&#39;s datatype is str&#34;
-                assert self._is_started, &#34;Backend is not started, SnowieCaster.start()&#34;
-                return self._backend._publish(channel, message, *args, **kwargs)
 
         async def asubscribe(self, channel: str) -&gt; None:
                 &#34;&#34;&#34;Subscribe to channel updates asynchronously&#34;&#34;&#34;
@@ -163,24 +169,31 @@ class SnowieCaster(SubscriptionUpdater):
 
         async def astart(self, *args, **kwargs) -&gt; None:
                 &#34;&#34;&#34;Start backend asynchronously&#34;&#34;&#34;
+                if self._is_started:
+                        return False
                 result = await self._backend._astart(*args, **kwargs)
                 self._is_started = True
                 return result
 
         async def astop(self, *args, **kwargs) -&gt; None:
                 &#34;&#34;&#34;Stop backend asynchronously&#34;&#34;&#34;
-                result = await self._backend._start(*args, **kwargs)
+                if not self._is_started:
+                        return False
+                result = await self._backend._astart(*args, **kwargs)
                 self._is_started = False
                 return result
 
-        async def apublish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
+        async def apublish(self, channel: str, message: Any, *args, testing=False, **kwargs) -&gt; None:
                 &#34;&#34;&#34;Publish message to channel asynchronously&#34;&#34;&#34;
                 self._check_instance_vars()
                 assert not isinstance(message, Results), &#34;message can&#39;t be SnowieCaster.abstract.Results \
                 datatype (don&#39;t try import it)&#34;
                 assert isinstance(channel, str), &#34;channel&#39;s datatype is str&#34;
                 assert self._is_started, &#34;Backend is not started, SnowieCaster.start()&#34;
-                return await self._backend._apublish(channel, message, *args, **kwargs)</code></pre>
+                result = await self._backend._apublish(channel, message, *args, **kwargs)
+                if not testing:
+                        await self._update_subscriptions(channel)
+                return result</code></pre>
 </details>
 </section>
 <section>
@@ -194,7 +207,7 @@ class SnowieCaster(SubscriptionUpdater):
 <dl>
 <dt id="SnowieCaster.base.SnowieCaster"><code class="flex name class">
 <span>class <span class="ident">SnowieCaster</span></span>
-<span>(</span><span>backend: <a title="SnowieCaster.abstract.AbstractBackend" href="abstract.html#SnowieCaster.abstract.AbstractBackend">AbstractBackend</a>, auto_start: Optional[bool] = False, *args, **kwargs)</span>
+<span>(</span><span>backend: <a title="SnowieCaster.abstract.AbstractBackend" href="abstract.html#SnowieCaster.abstract.AbstractBackend">AbstractBackend</a>, *args, requests_delay=None, auto_start: Optional[bool] = False, **kwargs)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>A general class for contacting with this library</p>
@@ -209,50 +222,60 @@ class SnowieCaster(SubscriptionUpdater):
                 &#34;&#34;&#34;This method checks is class vars are valid&#34;&#34;&#34;
                 assert isinstance(self._channel_subs, dict)
                 assert isinstance(self._backend, AbstractBackend)
+                assert hasattr(self._backend, &#34;_request_delay_limit&#34;), \
+                &#34;Haven&#39;t _request_delay_limit attribute in backend class&#34;
+                assert self._backend._request_delay_limit is None or \
+                isinstance(self._backend._request_delay_limit, int), \
+                &#34;Bad _request_delay_limit attribute datatype in backend class&#34;
+
+        def get_request_delay(self):
+                return self._request_delay
 
         async def _update_subscriptions(self, channel: str):
                 &#34;&#34;&#34;This method inherits from SubscriptionUpdater and updates Subscription&#39;s class Queries&#34;&#34;&#34;
                 self._check_instance_vars()
+                if not self._is_started:
+                        return False
                 assert isinstance(channel, str), &#34;channel&#39;s datatype is str&#34;
-                assert channel in self._channel_subs, &#34;can&#39;t find channel&#34;
-                backend_iterator: AsyncIterator[Any] = self._backend._asubscribe(channel)
+                if channel not in self._channel_subs:
+                        return False
                 subs: List[Subscription] = self._channel_subs[channel]
                 assert isinstance(subs, list)
-
-                subs_length = len(subs)
-                if subs_length &lt; 1:
-                        return False
 
                 result = Results.NONE_DATA
                 async def get_result():
                         nonlocal result
                         if result is Results.NONE_DATA:
-                                result = await backend_iterator.__anext__()
+                                result = await self._backend._aget_all(channel)
                         return result
 
-
-                for i in range(subs_length):
-                        sub = subs[i]
+                for sub in subs:
+                        assert isinstance(sub, Subscription), &#34;sub&#39;s datatype isn&#39;t Subscription&#34;
                         if not isinstance(sub._queue, Queue):
                                 # here is mb bug
-                                subs._queue = None
-                                del subs[i]
+                                sub._queue = None
+                                subs.remove(sub)
                                 continue
                         data = await get_result()
-                        if data is Results.NO_DATA:
+                        if len(data) == 0:
                                 return False
-                        await sub._queue.put(result)
+                        for data_result in data:
+                                await sub._queue.put(data_result)
                 return True
 
         # what a stupid warning in pylint
-        def __init__(self, backend: AbstractBackend, auto_start: Optional[bool] = False, *args, **kwargs): #pylint: disable=W1113
+        def __init__(self, backend: AbstractBackend, *args, requests_delay = None,
+                                 auto_start: Optional[bool] = False, **kwargs):
                 &#34;&#34;&#34;Class init method&#34;&#34;&#34;
-                assert isinstance(backend, AbstractBackend), &#34;This is not a backend class instance&#34;
                 assert isinstance(auto_start, bool), &#34;auto_start&#39;s datatype is Optional[bool]&#34;
                 self._backend = backend
+                self._request_delay = requests_delay
                 self._channel_subs: Dict[str, List[Subscription]] = {}
                 self._is_started = False
 
+                self._check_instance_vars()
+                if backend._request_delay_limit is None:
+                        self._request_delay = None
                 if auto_start:
                         self.start(*args, **kwargs)
 
@@ -265,23 +288,19 @@ class SnowieCaster(SubscriptionUpdater):
 
         def start(self, *args, **kwargs) -&gt; None:
                 &#34;&#34;&#34;try to start backend synchronously&#34;&#34;&#34;
+                if self._is_started:
+                        return False
                 result = self._backend._start(*args, **kwargs)
                 self._is_started = True
                 return result
 
         def stop(self) -&gt; None:
                 &#34;&#34;&#34;try to stop backend synchronously&#34;&#34;&#34;
+                if not self._is_started:
+                        return False
                 result = self._backend._stop()
                 self._is_started = False
                 return result
-
-        def publish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
-                &#34;&#34;&#34;A method that publishes message to channel&#34;&#34;&#34;
-                self._check_instance_vars()
-                assert not isinstance(message, Results), &#34;message can&#39;t be this datatype&#34;
-                assert isinstance(channel, str), &#34;channel&#39;s datatype is str&#34;
-                assert self._is_started, &#34;Backend is not started, SnowieCaster.start()&#34;
-                return self._backend._publish(channel, message, *args, **kwargs)
 
         async def asubscribe(self, channel: str) -&gt; None:
                 &#34;&#34;&#34;Subscribe to channel updates asynchronously&#34;&#34;&#34;
@@ -296,24 +315,31 @@ class SnowieCaster(SubscriptionUpdater):
 
         async def astart(self, *args, **kwargs) -&gt; None:
                 &#34;&#34;&#34;Start backend asynchronously&#34;&#34;&#34;
+                if self._is_started:
+                        return False
                 result = await self._backend._astart(*args, **kwargs)
                 self._is_started = True
                 return result
 
         async def astop(self, *args, **kwargs) -&gt; None:
                 &#34;&#34;&#34;Stop backend asynchronously&#34;&#34;&#34;
-                result = await self._backend._start(*args, **kwargs)
+                if not self._is_started:
+                        return False
+                result = await self._backend._astart(*args, **kwargs)
                 self._is_started = False
                 return result
 
-        async def apublish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
+        async def apublish(self, channel: str, message: Any, *args, testing=False, **kwargs) -&gt; None:
                 &#34;&#34;&#34;Publish message to channel asynchronously&#34;&#34;&#34;
                 self._check_instance_vars()
                 assert not isinstance(message, Results), &#34;message can&#39;t be SnowieCaster.abstract.Results \
                 datatype (don&#39;t try import it)&#34;
                 assert isinstance(channel, str), &#34;channel&#39;s datatype is str&#34;
                 assert self._is_started, &#34;Backend is not started, SnowieCaster.start()&#34;
-                return await self._backend._apublish(channel, message, *args, **kwargs)</code></pre>
+                result = await self._backend._apublish(channel, message, *args, **kwargs)
+                if not testing:
+                        await self._update_subscriptions(channel)
+                return result</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
@@ -323,7 +349,7 @@ class SnowieCaster(SubscriptionUpdater):
 <h3>Methods</h3>
 <dl>
 <dt id="SnowieCaster.base.SnowieCaster.apublish"><code class="name flex">
-<span>async def <span class="ident">apublish</span></span>(<span>self, channel: str, message: Any, *args, **kwargs) ‑> None</span>
+<span>async def <span class="ident">apublish</span></span>(<span>self, channel: str, message: Any, *args, testing=False, **kwargs) ‑> None</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Publish message to channel asynchronously</p></div>
@@ -331,14 +357,17 @@ class SnowieCaster(SubscriptionUpdater):
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">async def apublish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
+<pre><code class="python">async def apublish(self, channel: str, message: Any, *args, testing=False, **kwargs) -&gt; None:
         &#34;&#34;&#34;Publish message to channel asynchronously&#34;&#34;&#34;
         self._check_instance_vars()
         assert not isinstance(message, Results), &#34;message can&#39;t be SnowieCaster.abstract.Results \
         datatype (don&#39;t try import it)&#34;
         assert isinstance(channel, str), &#34;channel&#39;s datatype is str&#34;
         assert self._is_started, &#34;Backend is not started, SnowieCaster.start()&#34;
-        return await self._backend._apublish(channel, message, *args, **kwargs)</code></pre>
+        result = await self._backend._apublish(channel, message, *args, **kwargs)
+        if not testing:
+                await self._update_subscriptions(channel)
+        return result</code></pre>
 </details>
 </dd>
 <dt id="SnowieCaster.base.SnowieCaster.astart"><code class="name flex">
@@ -352,6 +381,8 @@ class SnowieCaster(SubscriptionUpdater):
 </summary>
 <pre><code class="python">async def astart(self, *args, **kwargs) -&gt; None:
         &#34;&#34;&#34;Start backend asynchronously&#34;&#34;&#34;
+        if self._is_started:
+                return False
         result = await self._backend._astart(*args, **kwargs)
         self._is_started = True
         return result</code></pre>
@@ -368,7 +399,9 @@ class SnowieCaster(SubscriptionUpdater):
 </summary>
 <pre><code class="python">async def astop(self, *args, **kwargs) -&gt; None:
         &#34;&#34;&#34;Stop backend asynchronously&#34;&#34;&#34;
-        result = await self._backend._start(*args, **kwargs)
+        if not self._is_started:
+                return False
+        result = await self._backend._astart(*args, **kwargs)
         self._is_started = False
         return result</code></pre>
 </details>
@@ -394,24 +427,6 @@ class SnowieCaster(SubscriptionUpdater):
         return sub</code></pre>
 </details>
 </dd>
-<dt id="SnowieCaster.base.SnowieCaster.publish"><code class="name flex">
-<span>def <span class="ident">publish</span></span>(<span>self, channel: str, message: Any, *args, **kwargs) ‑> None</span>
-</code></dt>
-<dd>
-<div class="desc"><p>A method that publishes message to channel</p></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">def publish(self, channel: str, message: Any, *args, **kwargs) -&gt; None:
-        &#34;&#34;&#34;A method that publishes message to channel&#34;&#34;&#34;
-        self._check_instance_vars()
-        assert not isinstance(message, Results), &#34;message can&#39;t be this datatype&#34;
-        assert isinstance(channel, str), &#34;channel&#39;s datatype is str&#34;
-        assert self._is_started, &#34;Backend is not started, SnowieCaster.start()&#34;
-        return self._backend._publish(channel, message, *args, **kwargs)</code></pre>
-</details>
-</dd>
 <dt id="SnowieCaster.base.SnowieCaster.start"><code class="name flex">
 <span>def <span class="ident">start</span></span>(<span>self, *args, **kwargs) ‑> None</span>
 </code></dt>
@@ -423,6 +438,8 @@ class SnowieCaster(SubscriptionUpdater):
 </summary>
 <pre><code class="python">def start(self, *args, **kwargs) -&gt; None:
         &#34;&#34;&#34;try to start backend synchronously&#34;&#34;&#34;
+        if self._is_started:
+                return False
         result = self._backend._start(*args, **kwargs)
         self._is_started = True
         return result</code></pre>
@@ -439,12 +456,22 @@ class SnowieCaster(SubscriptionUpdater):
 </summary>
 <pre><code class="python">def stop(self) -&gt; None:
         &#34;&#34;&#34;try to stop backend synchronously&#34;&#34;&#34;
+        if not self._is_started:
+                return False
         result = self._backend._stop()
         self._is_started = False
         return result</code></pre>
 </details>
 </dd>
 </dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="SnowieCaster.abstract.SubscriptionUpdater" href="abstract.html#SnowieCaster.abstract.SubscriptionUpdater">SubscriptionUpdater</a></b></code>:
+<ul class="hlist">
+<li><code><a title="SnowieCaster.abstract.SubscriptionUpdater.get_request_delay" href="abstract.html#SnowieCaster.abstract.SubscriptionUpdater.get_request_delay">get_request_delay</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 <dt id="SnowieCaster.base.Subscription"><code class="flex name class">
 <span>class <span class="ident">Subscription</span></span>
@@ -466,23 +493,23 @@ class SnowieCaster(SubscriptionUpdater):
                 self.updater = updater
                 self._queue = Queue()
 
-        async def __aiter__(self):
-                while isinstance(self._queue, Queue):
+        async def __aiter__(self) -&gt; Optional[AsyncGenerator]:
+                while True:
                         assert isinstance(self.channel, str), &#34;channel&#39;s datatype is str&#34;
-                        if self._queue.empty():
+                        while isinstance(self._queue, Queue) and self._queue.empty():
                                 await self.updater._update_subscriptions(self.channel)
-                                if self._queue.empty():
-                                        yield None
-                        else:
-                                yield await self._queue.get()
+                                request_delay = self.updater.get_request_delay()
+                                if request_delay is None:
+                                        break
+                                await sleep(request_delay)
+                        if not isinstance(self._queue, Queue):
+                                break
+                        yield await self._queue.get()
 
-        def __enter__(self):
+        async def __aenter__(self):
                 return self
 
-        def __exit__(self, *args, **kwargs):
-                self._queue = None
-
-        def __del__(self):
+        async def __aexit__(self, *args, **kwargs):
                 self._queue = None</code></pre>
 </details>
 </dd>
@@ -509,7 +536,6 @@ class SnowieCaster(SubscriptionUpdater):
 <li><code><a title="SnowieCaster.base.SnowieCaster.astart" href="#SnowieCaster.base.SnowieCaster.astart">astart</a></code></li>
 <li><code><a title="SnowieCaster.base.SnowieCaster.astop" href="#SnowieCaster.base.SnowieCaster.astop">astop</a></code></li>
 <li><code><a title="SnowieCaster.base.SnowieCaster.asubscribe" href="#SnowieCaster.base.SnowieCaster.asubscribe">asubscribe</a></code></li>
-<li><code><a title="SnowieCaster.base.SnowieCaster.publish" href="#SnowieCaster.base.SnowieCaster.publish">publish</a></code></li>
 <li><code><a title="SnowieCaster.base.SnowieCaster.start" href="#SnowieCaster.base.SnowieCaster.start">start</a></code></li>
 <li><code><a title="SnowieCaster.base.SnowieCaster.stop" href="#SnowieCaster.base.SnowieCaster.stop">stop</a></code></li>
 </ul>

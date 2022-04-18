@@ -10,6 +10,9 @@ from ...abstract import ISyncBackend
 
 class MemoryBackend(ISyncBackend):
 	"""This class allows you to use pub/sub in-memory"""
+
+	_request_delay_limit = None
+
 	def _check_instance_vars(self):
 		"""This method checks is class vars are valid"""
 		assert hasattr(self, 'store'), 'store is not defined, mb u call start?'
