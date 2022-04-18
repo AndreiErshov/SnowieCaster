@@ -88,7 +88,6 @@ class SnowieCaster(SubscriptionUpdater):
 				await sub._queue.put(data_result)
 		return True
 
-	# what a stupid warning in pylint
 	def __init__(self, backend: AbstractBackend, *args, requests_delay = None,
 				 auto_start: Optional[bool] = False, **kwargs):
 		"""Class init method"""
