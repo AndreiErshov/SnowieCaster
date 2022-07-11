@@ -8,4 +8,3 @@ Python 3.6+
 ## Installation
 * `pip install snowiecaster`
 #
-sry for bad eng
